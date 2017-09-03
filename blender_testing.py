@@ -289,8 +289,10 @@ class FunctionCallExpression:
         self.call_string = call_string
         self.modules = modules
 
+
 class BadFixtureArgument(Exception):
-    pass
+    """Exception raised when a fixture gets a wrong argument
+    """
 
 
 def blender_fixture():
@@ -311,12 +313,21 @@ def blender_fixture():
         def inside_blender_wrapper(func):
             """Decorator for when we are inside of Blender
 
-            It does nothing : return the input function as is.
+            It returns a decorated function which sort of mimics the py.test
+            fixtures
             """
 
             return_values = dict()
 
             def decorated_function(*args):
+                """Decorated function returned by the blender_fixture decorator
+                when inside Blender
+
+                It uses the function closure to remember if the function should
+                be called or if has already been (and and this cas returns
+                the return value directly)
+                """
+
                 key = (args)
                 if key not in return_values:
                     return_values[key] = func(*args)
