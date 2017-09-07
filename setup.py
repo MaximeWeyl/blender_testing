@@ -6,6 +6,6 @@ from setuptools import setup
 
 setup(
     name='blendertesting',
-    version='0.0.1',
+    version='0.0.2',
     py_modules=['blender_testing']
     )

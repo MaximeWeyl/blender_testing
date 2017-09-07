@@ -8,6 +8,7 @@ import contextlib
 import tempfile
 import os
 import pickle
+import shutil
 
 from unittest import TestCase
 import importlib.util
@@ -45,19 +46,18 @@ class BlenderNotFound(Exception):
     """Exception Raised when the path to blender is not found
     """
 
-@contextlib.contextmanager
-def _closable_named_tempfile():
-    """Context manager for providing a temp file
 
-    This file can be closed to read within Blender or any other process.
-    The temp file is deleted at the end of the context manager ('with' keyword)
+@contextlib.contextmanager
+def _tempdir():
+    """Context manager for providing a temp directory
+
+    The temp dir is deleted at the end of the context manager ('with' keyword)
     """
     try:
-        file = tempfile.NamedTemporaryFile("w+t", delete=False)
-        yield file
+        directory = tempfile.mkdtemp()
+        yield directory
     finally:
-        file.close()
-        os.remove(file.name)
+        shutil.rmtree(directory)
 
 
 def _check_no_blender_error(code, erreur):
@@ -84,6 +84,8 @@ def run_inside_blender(blender_path=None, import_paths=None):
 
     if import_paths is None:
         import_paths = []
+    else:
+        import_paths = list(import_paths)
 
     if INSIDE_BLENDER:
         def wrapper(func):
@@ -133,39 +135,43 @@ def run_inside_blender(blender_path=None, import_paths=None):
                 ", ".join(args_strings)
                 )
 
-            script = "\n".join([
-                r"import traceback,sys",
-                r"print('{}')".format(BEGIN_LINE),
-                r"try:",
-                r"    import sys",
-                r"    sys.path.extend({})".format(import_paths),
-                r"    import {}".format(", ".join(modules)),
-                r"    print('Import OK')",
-                r"    {}".format(call_string),
-                r"    print('{}')".format(END_LINE),
-                r"except Exception as e:",
-                r"    print('{}')".format(END_LINE),
-                r"    print('{}')".format(ERROR_BEGIN_LINE),
-                r"    print(e)",
-                r"    traceback.print_exc(file=sys.stdout)",
-                r"    print('{}')".format(ERROR_END_LINE),
-                r"    exit({})".format(BLENDER_FAILURE_CODE),
-                ])
+            with _tempdir() as temp_dir:
+                shutil.copy2(__file__, temp_dir)
+                import_paths.append(temp_dir)
 
-            print(script)
-            print()
+                script = "\n".join([
+                    r"import traceback,sys",
+                    r"print('{}')".format(BEGIN_LINE),
+                    r"try:",
+                    r"    import sys",
+                    r"    sys.path.extend({})".format(import_paths),
+                    r"    import {}".format(", ".join(modules)),
+                    r"    print('Import OK')",
+                    r"    {}".format(call_string),
+                    r"    print('{}')".format(END_LINE),
+                    r"except Exception as e:",
+                    r"    print('{}')".format(END_LINE),
+                    r"    print('{}')".format(ERROR_BEGIN_LINE),
+                    r"    print(e)",
+                    r"    traceback.print_exc(file=sys.stdout)",
+                    r"    print('{}')".format(ERROR_END_LINE),
+                    r"    exit({})".format(BLENDER_FAILURE_CODE),
+                    ])
 
-            with _closable_named_tempfile() as file:
-                file.write(script)
-                file.close()
+                file_path = os.path.join(temp_dir, "script_blender.py")
+                with open(file_path, "w") as file:
+                    file.write(script)
 
                 call_args = [
                     blender_path, "-b",
                     "--python-exit-code", str(BLENDER_FAILURE_CODE),
-                    "--python", file.name
+                    "--python", file_path
                     ]
 
-                print(call_args)
+                print("In {} : {}".format(
+                    temp_dir, os.listdir(temp_dir)))
+                print("---Script :---\n{}".format(script))
+                print("Calling : {}".format(call_args))
 
                 try:
                     process_return = subprocess.run(
